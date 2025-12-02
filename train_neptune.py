@@ -1,6 +1,7 @@
 import os
 import time
 from datetime import datetime
+import argparse
 
 import torch
 import torch.nn as nn
@@ -10,6 +11,37 @@ from torchvision.models import vit_b_16
 from sklearn.metrics import f1_score
 
 from imagenet_data import build_imagenet_loaders  # your loaders
+
+# -----------------------
+# Neptune setup
+# -----------------------
+USE_NEPTUNE = True  # set False if you want to disable logging
+NEPTUNE_API_TOKEN = "eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJjYjlhZjMxMS1mZjgyLTQ4Y2YtYmY5ZC1mMjVjOWU2YmI4YWMifQ==" # <-- put your token here
+
+try:
+    import neptune
+except ImportError:
+    neptune = None
+    USE_NEPTUNE = False
+    print("[WARN] Neptune is not installed; disabling Neptune logging.")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="ViT-B/16 ImageNet training")
+
+    parser.add_argument("--train-batch-size", type=int, default=256)
+    parser.add_argument("--test-batch-size", type=int, default=256)
+    parser.add_argument("--num-workers", type=int, default=8)
+    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--lr", type=float, default=1e-4)
+
+    # optional sweep meta-info
+    parser.add_argument("--tag", action="append", default=None,
+                        help="Additional Neptune tags (can be used multiple times)")
+    parser.add_argument("--run-name", type=str, default=None,
+                        help="Optional custom run name for Neptune")
+
+    return parser.parse_args()
 
 
 def compute_accuracy(logits, targets):
@@ -76,16 +108,18 @@ def test_metrics(model, data_loader, device):
 
 
 def main():
+    args = parse_args()
+
     # -----------------------
     # Basic configuration
     # -----------------------
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    train_batch_size = 256
-    test_batch_size = 256
-    num_workers = 8
-    num_epochs = 1  # as requested
-    lr = 1e-4       # "reasonable" LR for Adam on ViT
+    train_batch_size = args.train_batch_size
+    test_batch_size = args.test_batch_size
+    num_workers = args.num_workers
+    num_epochs = args.epochs
+    lr = args.lr
 
     # Make sure directories exist
     os.makedirs("saved_models", exist_ok=True)
@@ -120,7 +154,8 @@ def main():
     # Name + logging setup
     # -----------------------
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    model_name = f"vit_b_16_epoch{num_epochs}_lr{lr}_bs{train_batch_size}_{timestamp}"
+    base_name = f"vit_b_16_epoch{num_epochs}_lr{lr}_bs{train_batch_size}_{timestamp}"
+    model_name = args.run_name if args.run_name is not None else base_name
     model_path = os.path.join("saved_models", model_name + ".pth")
     log_path = os.path.join("outputs", model_name + ".txt")
 
@@ -137,8 +172,37 @@ def main():
     log_lines.append("")
 
     # -----------------------
-    # Training (1 epoch)
+    # Neptune run init
     # -----------------------
+    run = None
+    if USE_NEPTUNE and neptune is not None:
+        extra_tags = args.tag if args.tag is not None else []
+        tags = ["vit_b_16", "supervised", "sweep"] + extra_tags
+
+        run = neptune.init_run(
+            project="ALLab-Boun/connected-pixels",
+            api_token=NEPTUNE_API_TOKEN,
+            name=model_name,
+            tags=tags,
+        )
+
+        # Log configuration
+        run["config"] = {
+            "model": "vit_b_16",
+            "epochs": num_epochs,
+            "train_batch_size": train_batch_size,
+            "test_batch_size": test_batch_size,
+            "num_workers": num_workers,
+            "optimizer": "Adam",
+            "lr": lr,
+            "num_classes": num_classes,
+            "timestamp": timestamp,
+        }
+
+    # -----------------------
+    # Training (epochs)
+    # -----------------------
+    print("Training started.")
     start_time = time.time()
 
     for epoch in range(1, num_epochs + 1):
@@ -149,7 +213,8 @@ def main():
 
         num_batches = len(train_loader)
         for batch_idx, (images, labels) in enumerate(train_loader, start=1):
-            if batch_idx % 500 == 0:
+            # Show which batch is currently processed
+            if batch_idx % 1000 == 0:
                 print(f"[TRAIN] Epoch {epoch}/{num_epochs} - Batch {batch_idx}/{num_batches}")
 
             images = images.to(device, non_blocking=True)
@@ -166,6 +231,7 @@ def main():
             correct, total = compute_accuracy(outputs, labels)
             total_correct += correct
             total_samples += total
+        
         
         print(f"[TRAIN] Epoch {epoch}/{num_epochs} - Batch {batch_idx}/{num_batches}")
 
@@ -190,6 +256,13 @@ def main():
         log_lines.append(f"  Val Acc:    {val_acc:.6f}")
         log_lines.append("")
 
+        # Log to Neptune
+        if run is not None:
+            run["train/loss"].append(epoch_loss)
+            run["train/acc"].append(train_acc)
+            run["val/acc"].append(val_acc)
+            run["epoch"].log(epoch)
+
     # -----------------------
     # Test evaluation
     # -----------------------
@@ -200,6 +273,11 @@ def main():
     log_lines.append(f"  Test Acc: {test_acc:.6f}")
     log_lines.append(f"  Test Macro F1: {test_f1:.6f}")
     log_lines.append("")
+
+    # Log test metrics to Neptune
+    if run is not None:
+        run["test/acc"] = test_acc
+        run["test/macro_f1"] = test_f1
 
     # -----------------------
     # Time & saving
@@ -216,6 +294,13 @@ def main():
         f.write("\n".join(log_lines))
 
     print(f"Wrote log to: {log_path}")
+
+    # Upload artifacts to Neptune
+    if run is not None:
+        run["time/total_sec"] = total_time_sec
+        run["artifacts/model"].upload(model_path)
+        run["artifacts/log"].upload(log_path)
+        run.stop()
 
 
 if __name__ == "__main__":
