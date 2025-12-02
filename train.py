@@ -132,7 +132,6 @@ def main():
         torch.cuda.manual_seed_all(TORCH_SEED)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print_gpu_mem("after cuda init")
 
     train_batch_size = args.train_batch_size
     test_batch_size = args.test_batch_size
@@ -156,7 +155,6 @@ def main():
 
     model = vit_b_16(weights=None)     
     model.to(device)
-    print_gpu_mem("after model.to(device)")
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), betas=(0.9, 0.999),lr=lr)
@@ -220,7 +218,7 @@ def main():
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
-            print_gpu_mem(f"after backward, batch {batch_idx+1}")
+            #print_gpu_mem(f"after backward, batch {batch_idx+1}")
             #optimizer.step()
             if batch_idx % accum_steps == 0:
                 optimizer.step()
