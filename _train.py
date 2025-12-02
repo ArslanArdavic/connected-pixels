@@ -3,11 +3,13 @@ import time
 from datetime import datetime
 import argparse
 
+import neptune
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.models import vit_b_16
 
+from tqdm import tqdm
 from sklearn.metrics import f1_score
 
 from imagenet_data import build_imagenet_loaders  # your loaders
@@ -17,14 +19,6 @@ from imagenet_data import build_imagenet_loaders  # your loaders
 # -----------------------
 USE_NEPTUNE = True  # set False if you want to disable logging
 NEPTUNE_API_TOKEN = "eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJjYjlhZjMxMS1mZjgyLTQ4Y2YtYmY5ZC1mMjVjOWU2YmI4YWMifQ==" # <-- put your token here
-
-try:
-    import neptune
-except ImportError:
-    neptune = None
-    USE_NEPTUNE = False
-    print("[WARN] Neptune is not installed; disabling Neptune logging.")
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description="ViT-B/16 ImageNet training")
@@ -84,8 +78,7 @@ def test_metrics(model, data_loader, device):
 
     with torch.no_grad():
         num_batches = len(data_loader)
-        for batch_idx, (images, labels) in enumerate(data_loader, start=1):
-            print(f"[TEST] Batch {batch_idx}/{num_batches}")
+        for batch_idx, (images, labels) in enumerate(tqdm(data_loader, total=num_batches, desc="[TEST]"), start=1):
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
 
