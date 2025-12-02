@@ -34,4 +34,4 @@ python -m pip install --upgrade --force-reinstall --no-cache-dir \
 # Simplistic case
 #python -u train.py --tag no_weight_decay --tag no_lr_warmup --tag no_lr_decay --tag no_dropout --tag no_grad_clip
 
-python -u train.py --w-decay 0.3 --lr-decay True --lr-warm True --dropout 0.1 --tag no_grad_clip
+python -u train.py --w-decay 0.3 --lr-decay --lr-warm --dropout 0.1 --tag no_grad_clip
