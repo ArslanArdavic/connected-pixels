@@ -9,6 +9,9 @@
 #SBATCH --container-image ghcr.io\#arslanardavic/vision
 #SBATCH --container-mounts=/stratch:/stratch
 
+echo "=== GPU info at job start ==="
+nvidia-smi --query-gpu=index,name,memory.total,memory.used,memory.free --format=csv
+
 
 set -euo pipefail
 

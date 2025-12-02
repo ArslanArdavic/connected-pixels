@@ -19,6 +19,16 @@ NEPTUNE_API_TOKEN = "eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGl
 TORCH_SEED = 42
 logger = None
 
+def print_gpu_mem(tag=""):
+    if not torch.cuda.is_available():
+        logger.info("CUDA not available")
+        return
+    torch.cuda.synchronize()
+    free, total = torch.cuda.mem_get_info()
+    used = total - free
+    logger.info(f"[GPU MEM {tag}] total={total/1024**3:.2f} GiB, "
+          f"used={used/1024**3:.2f} GiB, free={free/1024**3:.2f} GiB")
+
 def parse_args():
     parser = argparse.ArgumentParser(description="ViT-B/16 ImageNet training")
 
@@ -122,6 +132,7 @@ def main():
         torch.cuda.manual_seed_all(TORCH_SEED)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print_gpu_mem("after cuda init")
 
     train_batch_size = args.train_batch_size
     test_batch_size = args.test_batch_size
@@ -145,6 +156,7 @@ def main():
 
     model = vit_b_16(weights=None)     
     model.to(device)
+    print_gpu_mem("after model.to(device)")
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), betas=(0.9, 0.999),lr=lr)
@@ -205,6 +217,7 @@ def main():
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
+            print_gpu_mem(f"after backward, batch {batch_idx+1}")
             optimizer.step()
 
             running_loss += loss.item() * labels.size(0)
