@@ -28,4 +28,4 @@ export SLURM_STDERR_PATH="$SLURM_SUBMIT_DIR/slurm/log/train/vitcls_${SLURM_JOB_I
 python -m pip install --upgrade --force-reinstall --no-cache-dir \
     numpy==1.25.1 scikit-learn==1.3.2 scipy
 
-python -u train.py --tag no_weight_decay --tag no_lr_warmup --tag no_lr_decay --tag no_dropout
+python -u train.py --tag no_weight_decay --tag no_lr_warmup --tag no_lr_decay --tag no_dropout --tag no_grad_clip

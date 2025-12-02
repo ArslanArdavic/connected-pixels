@@ -1,6 +1,7 @@
 import os
 import time
 import argparse
+import logging
 from datetime import datetime
 
 import torch
@@ -8,13 +9,15 @@ import torch.nn as nn
 from torchvision.models import vit_b_16
 from sklearn.metrics import f1_score
 
-import neptune
 import tqdm
+import neptune
+from neptune.integrations.python_logger import NeptuneHandler
 
 from imagenet_data import build_imagenet_loaders 
 
-
 NEPTUNE_API_TOKEN = "eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJjYjlhZjMxMS1mZjgyLTQ4Y2YtYmY5ZC1mMjVjOWU2YmI4YWMifQ==" 
+TORCH_SEED = 42
+logger = None
 
 def parse_args():
     parser = argparse.ArgumentParser(description="ViT-B/16 ImageNet training")
@@ -24,6 +27,11 @@ def parse_args():
     parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--lr", type=float, default=3e-3)
+    parser.add_argument("--w-decay", type=int, default=None)
+    parser.add_argument("--lr-decay", type=str, default=None, help="linear or cosine")
+    parser.add_argument("--lr-warm", type=bool, default=False, help="10k steps if not None")
+    parser.add_argument("--dropout", type=int, default=None, help="0.1 if not None")
+    parser.add_argument("--g-clip", type=bool, default=False, help="global norm 1 if not None")
 
     parser.add_argument("--tag", action="append", default=None,
                         help="Neptune tags")
@@ -49,7 +57,7 @@ def evaluate(model, data_loader, device):
         total_batch = len(data_loader)
         for batch_idx, (images, labels) in enumerate(data_loader, start=1):
             if batch_idx % 50 == 0:
-                print(f"[VAL] Batch ({batch_idx}/{total_batch})")
+                logger.info(f"[VAL] Batch ({batch_idx}/{total_batch})")
 
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
@@ -59,7 +67,7 @@ def evaluate(model, data_loader, device):
             total_correct += correct
             total_samples += total
         
-        print(f"[VAL] Batch ({batch_idx}/{total_batch})")
+        logger.info(f"[VAL] Batch ({batch_idx}/{total_batch})")
 
     acc = total_correct / total_samples if total_samples > 0 else 0.0
     return acc
@@ -76,7 +84,7 @@ def test_metrics(model, data_loader, device):
         total_batch = len(data_loader)
         for batch_idx, (images, labels) in enumerate(data_loader, start=1):
             if batch_idx % 50 == 0:
-                print(f"[TEST] Batch ({batch_idx}/{total_batch})")
+                logger.info(f"[TEST] Batch ({batch_idx}/{total_batch})")
 
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
@@ -91,7 +99,7 @@ def test_metrics(model, data_loader, device):
             all_targets.append(labels.cpu())
             all_preds.append(preds.cpu())
         
-        print(f"[TEST] Batch ({batch_idx}/{total_batch})")
+        logger.info(f"[TEST] Batch ({batch_idx}/{total_batch})")
 
     all_targets = torch.cat(all_targets).numpy()
     all_preds = torch.cat(all_preds).numpy()
@@ -104,6 +112,15 @@ def main():
     
     args = parse_args()
 
+    global logger
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    logger.addHandler(logging.StreamHandler())
+
+    torch.manual_seed(TORCH_SEED)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(TORCH_SEED)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     train_batch_size = args.train_batch_size
@@ -111,9 +128,13 @@ def main():
     num_workers = args.num_workers
     num_epochs = args.epochs
     lr = args.lr
+    w_decay = args.w_decay
+    lr_decay = args.lr_decay
+    lr_warm = args.lr_warm
+    dropout = args.dropout
+    g_clip = args.g_clip
     
     os.makedirs("saved_models", exist_ok=True)
-    os.makedirs("outputs", exist_ok=True)
 
     train_loader, val_loader, test_loader, wnid_to_idx = build_imagenet_loaders(
         train_batch_size=train_batch_size,
@@ -121,7 +142,6 @@ def main():
         num_workers=num_workers,
     )
 
-    num_classes = 1000 
 
     model = vit_b_16(weights=None)     
     model.to(device)
@@ -139,6 +159,18 @@ def main():
         name=args.run_name if args.run_name is not None else "vit_b_16 base config",
         tags=tags,
     )
+    
+    logger.addHandler(NeptuneHandler(run=run))
+    job_id = os.environ.get("SLURM_ARRAY_JOB_ID") or os.environ.get("SLURM_JOB_ID") or "UNKNOWN"
+    stdout_path = os.environ.get("SLURM_STDOUT_PATH") or f"slurm/log/greeting_{job_id}.out"
+    stderr_path = os.environ.get("SLURM_STDERR_PATH") or f"slurm/log/greeting_{job_id}.err"
+
+    # Log as a small namespace/dict (shows in metadata even if values are empty strings)
+    run["slurm"] = {
+        "job_id": job_id,
+        "stdout_path": stdout_path,
+        "stderr_path": stderr_path,
+    }
     run["config"] = {
             "model": "vit_b_16",
             "epochs": num_epochs,
@@ -147,7 +179,11 @@ def main():
             "num_workers": num_workers,
             "optimizer": "Adam",
             "lr": lr,
-            "num_classes": num_classes,
+            "w_decay": w_decay,
+            "lr_decay": lr_decay,
+            "lr_warm": lr_warm,
+            "dropout": dropout,
+            "g_clip": g_clip,
             "timestamp": timestamp,
         }
     
@@ -160,7 +196,7 @@ def main():
         total_batch = len(train_loader)
         for batch_idx, (images, labels) in enumerate(train_loader, start=1):
             if batch_idx % 50 == 0:
-                print(f"[TRAIN] Epoch ({epoch}/ {num_epochs}) -- Batch ({batch_idx}/{total_batch})")
+                logger.info(f"[TRAIN] Epoch ({epoch}/ {num_epochs}) -- Batch ({batch_idx}/{total_batch})")
 
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
@@ -178,7 +214,7 @@ def main():
             total_samples += total
         
         
-        print(f"[TRAIN] Epoch ({epoch}/ {num_epochs}) -- Batch ({batch_idx}/{total_batch})")
+        logger.info(f"[TRAIN] Epoch ({epoch}/ {num_epochs}) -- Batch ({batch_idx}/{total_batch})")
         
         epoch_loss = running_loss / total_samples if total_samples > 0 else 0.0
         train_acc = total_correct / total_samples if total_samples > 0 else 0.0
@@ -189,3 +225,6 @@ def main():
         run["train/acc"].append(train_acc)
         run["val/acc"].append(val_acc)
         run["epoch"].log(epoch)
+
+if __name__ == "__main__":
+    main()
