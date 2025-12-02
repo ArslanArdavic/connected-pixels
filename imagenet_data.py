@@ -159,20 +159,25 @@ def build_imagenet_loaders(
 
 if __name__ == "__main__":
     print("Testing the data loaders.")
-    
+
     train_loader, val_loader, test_loader, wnid_to_idx = build_imagenet_loaders()
 
     print("Loaded training images.")
-    for images, labels in train_loader:
-        print(images.shape)
-        print(labels.shape)
+    num_batches = len(train_loader)
+    for batch_idx, (images, labels) in enumerate(train_loader, start=1):
+        print(f"Batch {batch_idx}/{num_batches}")
+        break
 
     print("Loaded validation images.")
-    for images, labels in train_loader:
+    num_batches = len(val_loader)
+    for batch_idx, (images, labels) in enumerate(val_loader, start=1):
+        print(f"Batch {batch_idx}/{num_batches}")
         print(images.shape)
         print(labels.shape)
 
     print("Loaded test images.")
-    for images, labels in train_loader:
+    num_batches = len(test_loader)
+    for batch_idx, (images, labels) in enumerate(test_loader, start=1):
+        print(f"Batch {batch_idx}/{num_batches}")
         print(images.shape)
         print(labels.shape)
