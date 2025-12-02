@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-gpu=8
 #SBATCH --mem-per-gpu=40G
 #SBATCH --container-image ghcr.io\#arslanardavic/vision
-
+#SBATCH --container-mounts=/stratch:/stratch,$HOME:$HOME
 
 set -euo pipefail
 
