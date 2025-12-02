@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=train
-#SBATCH --output=slurm/log/train/vitcls_%j.out
-#SBATCH --error=slurm/log/train/vitcls_%j.err
+#SBATCH --output=slurm/log/train/multigpu_%j.out
+#SBATCH --error=slurm/log/train/multigpu_%j.err
 #SBATCH --time=24:00:00
 #SBATCH --gpus=1
 #SBATCH --cpus-per-gpu=8
@@ -22,8 +22,8 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 mkdir -p slurm/log/train
 
 # resolve the same filename sbatch will use by expanding %j → $SLURM_JOB_ID
-export SLURM_STDOUT_PATH="$SLURM_SUBMIT_DIR/slurm/log/train/vitcls_${SLURM_JOB_ID}.out"
-export SLURM_STDERR_PATH="$SLURM_SUBMIT_DIR/slurm/log/train/vitcls_${SLURM_JOB_ID}.err"
+export SLURM_STDOUT_PATH="$SLURM_SUBMIT_DIR/slurm/log/train/multigpu_${SLURM_JOB_ID}.out"
+export SLURM_STDERR_PATH="$SLURM_SUBMIT_DIR/slurm/log/train/multigpu_${SLURM_JOB_ID}.err"
 
 >&2 echo "SLURM_STDOUT_PATH=$SLURM_STDOUT_PATH"
 >&2 echo "SLURM_STDERR_PATH=$SLURM_STDERR_PATH"
@@ -31,7 +31,4 @@ export SLURM_STDERR_PATH="$SLURM_SUBMIT_DIR/slurm/log/train/vitcls_${SLURM_JOB_I
 python -m pip install --upgrade --force-reinstall --no-cache-dir \
     numpy==1.25.1 scikit-learn==1.3.2 scipy
 
-# Simplistic case
-#python -u train.py --tag no_weight_decay --tag no_lr_warmup --tag no_lr_decay --tag no_dropout --tag no_grad_clip
-
-python -u train.py --w-decay 0.3 --lr-decay True --lr-warm True --dropout 0.1 --tag no_grad_clip
+python -u train_direct.py --tag no_weight_decay --tag no_lr_warmup --tag no_lr_decay --tag no_dropout --tag no_grad_clip

@@ -39,10 +39,10 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--lr", type=float, default=3e-3)
     parser.add_argument("--w-decay", type=int, default=0)
-    parser.add_argument("--lr-decay", type=bool, default=False, help="cosine")
-    parser.add_argument("--lr-warm", type=bool, default=False, help="10k steps if not None")
+    parser.add_argument("--lr-decay", action="store_true", help="cosine if enabled")
+    parser.add_argument("--lr-warm", action="store_true", help="10k steps if enabled")
     parser.add_argument("--dropout", type=int, default=0.0, help="0.1 if not None")
-    parser.add_argument("--g-clip", type=bool, default=False, help="global norm 1 if not None")
+    parser.add_argument("--g-clip", action="store_true", help="global norm 1 if not None")
 
     parser.add_argument("--tag", action="append", default=None,
                         help="Neptune tags")
