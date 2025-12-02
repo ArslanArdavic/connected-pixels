@@ -24,7 +24,7 @@ def parse_args():
 
     parser.add_argument("--train-batch-size", type=int, default=4096)
     parser.add_argument("--test-batch-size", type=int, default=4096)
-    parser.add_argument("--num-workers", type=int, default=8)
+    parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--lr", type=float, default=3e-3)
     parser.add_argument("--w-decay", type=int, default=None)
