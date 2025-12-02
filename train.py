@@ -206,6 +206,9 @@ def main():
         total_samples = 0
         
         total_batch = len(train_loader)
+
+        accum_steps=16
+        optimizer.zero_grad() #DELETE IF NOT ACCM.
         for batch_idx, (images, labels) in enumerate(train_loader, start=1):
             if batch_idx % 50 == 0:
                 logger.info(f"[TRAIN] Epoch ({epoch}/ {num_epochs}) -- Batch ({batch_idx}/{total_batch})")
@@ -213,13 +216,15 @@ def main():
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
 
-            optimizer.zero_grad()
+            #optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
             print_gpu_mem(f"after backward, batch {batch_idx+1}")
-            optimizer.step()
-
+            #optimizer.step()
+            if batch_idx % accum_steps == 0:
+                optimizer.step()
+                optimizer.zero_grad()
             running_loss += loss.item() * labels.size(0)
 
             correct, total = compute_accuracy(outputs, labels)
