@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument("--w-decay", type=int, default=None)
     parser.add_argument("--lr-decay", type=str, default=None, help="linear or cosine")
     parser.add_argument("--lr-warm", type=bool, default=False, help="10k steps if not None")
-    parser.add_argument("--dropout", type=int, default=None, help="0.1 if not None")
+    parser.add_argument("--dropout", type=int, default=0.0, help="0.1 if not None")
     parser.add_argument("--g-clip", type=bool, default=False, help="global norm 1 if not None")
 
     parser.add_argument("--tag", action="append", default=None,
@@ -179,8 +179,8 @@ def main():
             "num_workers": num_workers,
             "optimizer": "Adam",
             "lr": lr,
-            "w_decay": w_decay,
-            "lr_decay": lr_decay,
+            "w_decay": w_decay if not w_decay == None else "None" ,
+            "lr_decay": lr_decay if not lr_decay == None else "None" ,
             "lr_warm": lr_warm,
             "dropout": dropout,
             "g_clip": g_clip,
