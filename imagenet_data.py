@@ -172,12 +172,10 @@ if __name__ == "__main__":
     num_batches = len(val_loader)
     for batch_idx, (images, labels) in enumerate(val_loader, start=1):
         print(f"Batch {batch_idx}/{num_batches}")
-        print(images.shape)
-        print(labels.shape)
+        break
 
     print("Loaded test images.")
     num_batches = len(test_loader)
     for batch_idx, (images, labels) in enumerate(test_loader, start=1):
         print(f"Batch {batch_idx}/{num_batches}")
-        print(images.shape)
-        print(labels.shape)
+        break
