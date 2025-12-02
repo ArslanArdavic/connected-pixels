@@ -33,7 +33,7 @@ def print_gpu_mem(tag=""):
 def parse_args():
     parser = argparse.ArgumentParser(description="ViT-B/16 ImageNet training")
 
-    parser.add_argument("--train-batch-size", type=int, default=256)
+    parser.add_argument("--train-batch-size", type=int, default=4096)
     parser.add_argument("--test-batch-size", type=int, default=1)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--epochs", type=int, default=1)
@@ -208,9 +208,7 @@ def main():
             "timestamp": timestamp,
         }
     # Following approach accumulates gradients
-    accum_steps=16
-    total_steps=num_epochs*len(train_loader)//accum_steps
-    #total_steps=num_epochs*len(train_loader                #USE IF NOT ACCM.
+    total_steps=num_epochs*len(train_loader)                #USE IF NOT ACCM.
     if lr_decay & lr_warm:
         lr_lambda = make_lr_lambda(warmup_steps=10000, total_steps=total_steps)
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
@@ -224,7 +222,6 @@ def main():
         
         total_batch = len(train_loader)
 
-        optimizer.zero_grad() #DELETE IF NOT ACCM.
         for batch_idx, (images, labels) in enumerate(train_loader, start=1):
             if batch_idx % 50 == 0:
                 logger.info(f"[TRAIN] Epoch ({epoch}/ {num_epochs}) -- Batch ({batch_idx}/{total_batch})")
@@ -232,16 +229,14 @@ def main():
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
 
-            #optimizer.zero_grad()                                          #USE IF NOT ACCM.
+            optimizer.zero_grad()                                          #USE IF NOT ACCM.
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
             #print_gpu_mem(f"after backward, batch {batch_idx+1}")
-            #optimizer.step()                                               #USE IF NOT ACCM.
-            if batch_idx % accum_steps == 0:                                #DELETE IF NOT ACCM. 
-                optimizer.step()
-                scheduler.step()
-                optimizer.zero_grad()
+            optimizer.step()                                               #USE IF NOT ACCM.
+            scheduler.step()
+
             running_loss += loss.item() * labels.size(0)
 
             correct, total = compute_accuracy(outputs, labels)
