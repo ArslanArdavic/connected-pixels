@@ -23,7 +23,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="ViT-B/16 ImageNet training")
 
     parser.add_argument("--train-batch-size", type=int, default=4096)
-    parser.add_argument("--test-batch-size", type=int, default=4096)
+    parser.add_argument("--test-batch-size", type=int, default=1)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--lr", type=float, default=3e-3)
