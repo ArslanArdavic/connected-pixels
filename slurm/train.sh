@@ -34,4 +34,5 @@ python -m pip install --upgrade --force-reinstall --no-cache-dir \
 # Simplistic case
 #python -u train.py --tag no_weight_decay --tag no_lr_warmup --tag no_lr_decay --tag no_dropout --tag no_grad_clip
 
-python -u train.py --w-decay 0.3 --lr-decay --lr-warm --dropout 0.1 --g-clip --tag paper_settings --tag 5_epochs
+python -u train_paper.py --w-decay 0.3 --lr-decay --lr-warm --dropout 0.1 --g-clip \
+    --tag paper_settings --tag 20_epochs --tag no_grad_accum
