@@ -2,7 +2,7 @@
 #SBATCH --job-name=train
 #SBATCH --output=slurm/log/train/vitcls_%j.out
 #SBATCH --error=slurm/log/train/vitcls_%j.err
-#SBATCH --time=24:00:00
+#SBATCH --time=10-00:00:00
 #SBATCH --gpus=1
 #SBATCH --cpus-per-gpu=8
 #SBATCH --mem-per-gpu=40G
