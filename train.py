@@ -34,9 +34,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="ViT-B/16 ImageNet training")
 
     parser.add_argument("--train-batch-size", type=int, default=256)
-    parser.add_argument("--test-batch-size", type=int, default=1)
-    parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--test-batch-size", type=int, default=128)
+    parser.add_argument("--num-workers", type=int, default=8)
+    parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--lr", type=float, default=3e-3)
     parser.add_argument("--w-decay", type=float, default=0)
     parser.add_argument("--lr-decay", action="store_true", help="cosine if enabled")
@@ -67,7 +67,7 @@ def evaluate(model, data_loader, device):
     with torch.no_grad():
         total_batch = len(data_loader)
         for batch_idx, (images, labels) in enumerate(data_loader, start=1):
-            if batch_idx % 50 == 0:
+            if batch_idx % 1000 == 0:
                 logger.info(f"[VAL] Batch ({batch_idx}/{total_batch})")
 
             images = images.to(device, non_blocking=True)
