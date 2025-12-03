@@ -171,6 +171,9 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), betas=(0.9, 0.999),lr=lr, weight_decay=w_decay)
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    model_dir = os.path.join("saved_models", "vit_b_16", timestamp)
+    os.makedirs(model_dir, exist_ok=True)
+    last_model_path = os.path.join(model_dir, "last_model.pth")
     extra_tags = args.tag if args.tag is not None else []
     tags = ["vit_b_16", "classification"] + extra_tags
 
@@ -210,8 +213,9 @@ def main():
     # Following approach accumulates gradients
     accum_steps=16
     total_steps=num_epochs*len(train_loader)//accum_steps
+    scheduler = None
     #total_steps=num_epochs*len(train_loader                #USE IF NOT ACCM.
-    if lr_decay & lr_warm:
+    if lr_decay and lr_warm:
         lr_lambda = make_lr_lambda(warmup_steps=10000, total_steps=total_steps)
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
 
@@ -239,8 +243,11 @@ def main():
             #print_gpu_mem(f"after backward, batch {batch_idx+1}")
             #optimizer.step()                                               #USE IF NOT ACCM.
             if batch_idx % accum_steps == 0:                                #DELETE IF NOT ACCM. 
+                if g_clip:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
-                scheduler.step()
+                if scheduler is not None:
+                    scheduler.step()
                 optimizer.zero_grad()
             running_loss += loss.item() * labels.size(0)
 
@@ -260,6 +267,13 @@ def main():
         run["train/acc"].append(train_acc)
         run["val/acc"].append(val_acc)
         run["epoch"].log(epoch)
+    
+    test_acc, test_f1 = test_metrics(model, test_loader, device)
+    logger.info(f"[TEST] Accuracy: {test_acc:.4f} | Macro F1: {test_f1:.4f}")
+
+    torch.save(model.state_dict(), last_model_path)
+    logger.info(f"Saved model to: {last_model_path}")
+    run["artifacts/last_model"].upload(last_model_path)
 
 if __name__ == "__main__":
     main()
