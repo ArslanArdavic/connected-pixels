@@ -165,6 +165,13 @@ def main():
         model = vit_b_16(weights=None, dropout=dropout)  
     else:
         model = vit_b_16(weights=None)     
+
+    logger.info(f"Model out feature dimension: {model.heads.head.out_features}")
+
+    if model.heads.head.out_features != 1000:
+        in_features = model.heads.head.in_features
+        model.heads.head = nn.Linear(in_features, 1000)
+
     model.to(device)
 
     criterion = nn.CrossEntropyLoss()
