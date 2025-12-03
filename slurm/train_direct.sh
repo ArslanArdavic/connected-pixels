@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=vit
+#SBATCH --job-name=vit_imgnet
 #SBATCH --output=slurm/log/train/multigpu_%j.out
 #SBATCH --error=slurm/log/train/multigpu_%j.err
-#SBATCH --time=24:00:00
+#SBATCH --time=10-00:00:00
 #SBATCH --gpus=4
 #SBATCH --cpus-per-gpu=8
 #SBATCH --mem-per-gpu=40G
