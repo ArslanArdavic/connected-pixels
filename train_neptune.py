@@ -154,13 +154,15 @@ def main():
     # Name + logging setup
     # -----------------------
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    base_name = f"vit_b_16_epoch{num_epochs}_lr{lr}_bs{train_batch_size}_{timestamp}"
-    model_name = args.run_name if args.run_name is not None else base_name
-    model_path = os.path.join("saved_models", model_name + ".pth")
-    log_path = os.path.join("outputs", model_name + ".txt")
+    #base_name = f"vit_b_16_epoch{num_epochs}_lr{lr}_bs{train_batch_size}_{timestamp}"
+    #model_name = args.run_name if args.run_name is not None else base_name
+    #model_path = os.path.join("saved_models", model_name + ".pth")
+    model_dir = os.path.join("saved_models", "vit_b_16", timestamp)
+    os.makedirs(model_dir, exist_ok=True)
+    model_path = os.path.join(model_dir, "model.pth")
+    log_path = os.path.join(model_dir, "log.txt")
 
     log_lines = []
-    log_lines.append(f"Model name: {model_name}")
     log_lines.append(f"Device: {device}")
     log_lines.append(f"Epochs: {num_epochs}")
     log_lines.append(f"Train batch size: {train_batch_size}")
@@ -182,7 +184,7 @@ def main():
         run = neptune.init_run(
             project="ALLab-Boun/connected-pixels",
             api_token=NEPTUNE_API_TOKEN,
-            name=model_name,
+            name="vit_b_16 auto most basic setup",
             tags=tags,
         )
 
@@ -288,6 +290,7 @@ def main():
     # Save model
     torch.save(model.state_dict(), model_path)
     print(f"Saved model to: {model_path}")
+    run["artifacts/model"].upload(model_path)
 
     # Write log file
     with open(log_path, "w") as f:
