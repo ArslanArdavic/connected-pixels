@@ -34,4 +34,4 @@ BS=128
 NW=8
 
 python train_neptune.py --epochs $EPOCHS --train-batch-size $BS --test-batch-size $BS --num-workers $NW \
-  --lr 3e-3 --tag "lr_3e-3" --tag "bs_$BS"
+  --lr 1e-5 --tag "lr_1e-5" --tag "bs_$BS"
