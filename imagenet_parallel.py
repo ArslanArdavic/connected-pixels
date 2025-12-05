@@ -188,6 +188,9 @@ if __name__ == "__main__":
     else:
         _maybe_print("[imagenet_parallel] Running in non-distributed mode", rank_only=False)
 
+    rank, world = _dist_info()
+    _maybe_print(f"[imagenet_parallel] Rank {rank} online out of {world}", rank_only=False)
+
     train_loader, val_loader, test_loader, samplers, _ = build_imagenet_distributed_loaders()
 
     # Pull a single batch from each loader to verify shape/labels
