@@ -32,11 +32,11 @@ from imagenet_parallel import (
 
 def parse_args():
     parser = argparse.ArgumentParser(description="ViT-B/16 ImageNet training (multi-GPU DDP)")
-    parser.add_argument("--train-batch-size", type=int, default=256, help="Per-GPU batch size")
-    parser.add_argument("--test-batch-size", type=int, default=256, help="Per-GPU batch size for val/test")
+    parser.add_argument("--train-batch-size", type=int, default=1024, help="Per-GPU batch size")
+    parser.add_argument("--test-batch-size", type=int, default=1024, help="Per-GPU batch size for val/test")
     parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=1)
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--lr", type=float, default=5e-5)
     parser.add_argument("--local_rank", type=int, default=0, help="Local rank passed by torchrun")
     # optional sweep meta-info (same as train_neptune.py)
     parser.add_argument("--tag", action="append", default=None, help="Additional Neptune tags (can be used multiple times)")
@@ -204,9 +204,9 @@ def main():
     run = None
     if rank == 0 and USE_NEPTUNE and neptune is not None:
         extra_tags = args.tag if args.tag is not None else []
-        tags = ["vit_b_16"] + extra_tags
+        tags = ["vit_b_16",  "gpu_4", "batch_1024_per_gpu","lr_5e-5"] + extra_tags
 
-        run_name = args.run_name if args.run_name is not None else "vit_b_16 parallel eff_batch_1024"
+        run_name = args.run_name if args.run_name is not None else "vit_b_16 parallel multi_gpu"
         run = neptune.init_run(
             project="ALLab-Boun/connected-pixels",
             api_token=NEPTUNE_API_TOKEN,
