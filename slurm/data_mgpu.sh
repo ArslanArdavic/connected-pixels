@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=data_mgpu
-#SBATCH --output=slurm/log/data/mpgu_%j.out
-#SBATCH --error=slurm/log/data/mpgu_%j.err
+#SBATCH --output=slurm/log/data/mgpu_%j.out
+#SBATCH --error=slurm/log/data/mgpu_%j.err
 #SBATCH --time=10-00:00:00
 #SBATCH --gpus=4
 #SBATCH --cpus-per-gpu=8
