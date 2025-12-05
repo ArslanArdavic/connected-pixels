@@ -38,8 +38,8 @@ def build_imagenet_distributed_loaders(
     train_root="/stratch/dataset/imagenet-object-localization-challenge/ILSVRC/Data/CLS-LOC/train",
     val_root="/stratch/dataset/imagenet-object-localization-challenge/ILSVRC/Data/CLS-LOC/val",
     devkit_root=os.path.expanduser("~/connected-pixels/ILSVRC2012_devkit_t12"),
-    train_batch_size=256,  # per GPU when distributed
-    test_batch_size=256,  # per GPU when distributed
+    train_batch_size=1024,  # per GPU when distributed
+    test_batch_size=1024,  # per GPU when distributed
     num_workers=8,
     val_fraction=0.1,
     distributed=True,
@@ -63,7 +63,7 @@ def build_imagenet_distributed_loaders(
     train_transform = transforms.Compose(
         [
             transforms.RandomResizedCrop(224),
-            transforms.RandomHorizontalFlip(),
+            #transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
         ]
     )

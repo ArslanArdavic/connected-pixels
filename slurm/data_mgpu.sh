@@ -27,8 +27,8 @@ export SLURM_STDERR_PATH="$SLURM_SUBMIT_DIR/slurm/log/data/mgpu_${SLURM_JOB_ID}.
 #python -m pip install --upgrade --force-reinstall --no-cache-dir \
 #    numpy==1.25.1 scikit-learn==1.3.2
 
-python -m pip install --upgrade --force-reinstall --no-cache-dir \
-    scipy
+#python -m pip install --upgrade --force-reinstall --no-cache-dir \
+#    scipy
 
 # Run the distributed data loader smoke test (one process per GPU)
 NUM_GPUS="${SLURM_GPUS:-4}"
