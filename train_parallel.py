@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument("--train-batch-size", type=int, default=256, help="Per-GPU batch size")
     parser.add_argument("--test-batch-size", type=int, default=256, help="Per-GPU batch size for val/test")
     parser.add_argument("--num-workers", type=int, default=8)
-    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--local_rank", type=int, default=0, help="Local rank passed by torchrun")
     # optional sweep meta-info (same as train_neptune.py)
