@@ -1,8 +1,8 @@
 import torch
-from vig_pytorch.vig import vig_ti
+from vig_pytorch.vig import vig_ti_224_gelu
 
 # 1) Instantiate a model
-model = vig_ti()          # or vig_s(), vig_b(), etc.
+model = vig_ti_224_gelu()          # or vig_s(), vig_b(), etc.
 model.eval()
 
 # 2) Create a dummy ImageNet-sized batch
