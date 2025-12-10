@@ -3,45 +3,22 @@ import time
 from datetime import datetime
 import argparse
 
+import neptune
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
 from vig_pytorch.vig import vig_ti_224_gelu
-
 from sklearn.metrics import f1_score
 
 from imagenet_data import build_imagenet_loaders  # your loaders
 
-# -----------------------
-# Neptune setup
-# -----------------------
-USE_NEPTUNE = True  # set False if you want to disable logging
+USE_NEPTUNE = True 
 NEPTUNE_API_TOKEN = "eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJjYjlhZjMxMS1mZjgyLTQ4Y2YtYmY5ZC1mMjVjOWU2YmI4YWMifQ==" # <-- put your token here
 
-try:
-    import neptune
-except ImportError:
-    neptune = None
-    USE_NEPTUNE = False
-    print("[WARN] Neptune is not installed; disabling Neptune logging.")
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="ViG-T ImageNet training")
-
-    parser.add_argument("--train-batch-size", type=int, default=768)
-    parser.add_argument("--test-batch-size", type=int, default=768)
-    parser.add_argument("--num-workers", type=int, default=8)
-    parser.add_argument("--epochs", type=int, default=300)
-    parser.add_argument("--lr", type=float, default=2e-3)
-
-    # optional sweep meta-info
-    parser.add_argument("--tag", action="append", default=None,
-                        help="Additional Neptune tags (can be used multiple times)")
-    parser.add_argument("--run-name", type=str, default=None,
-                        help="Optional custom run name for Neptune")
-
-    return parser.parse_args()
+NW       = 8
+TRAIN_BS = 256
+TEST_BS  = 256
+EPOCHS   = 300
+LR       = 2e-3
 
 
 def compute_accuracy(logits, targets):
@@ -108,18 +85,17 @@ def test_metrics(model, data_loader, device):
 
 
 def main():
-    args = parse_args()
 
     # -----------------------
     # Basic configuration
     # -----------------------
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    train_batch_size = args.train_batch_size
-    test_batch_size = args.test_batch_size
-    num_workers = args.num_workers
-    num_epochs = args.epochs
-    lr = args.lr
+    train_batch_size = TRAIN_BS
+    test_batch_size = TEST_BS
+    num_workers = NW
+    num_epochs = EPOCHS
+    lr = LR
 
     # Make sure directories exist
     os.makedirs("saved_models", exist_ok=True)
@@ -150,9 +126,6 @@ def main():
     # Name + logging setup
     # -----------------------
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    #base_name = f"vit_b_16_epoch{num_epochs}_lr{lr}_bs{train_batch_size}_{timestamp}"
-    #model_name = args.run_name if args.run_name is not None else base_name
-    #model_path = os.path.join("saved_models", model_name + ".pth")
     model_dir = os.path.join("saved_models", "vig_ti", timestamp)
     os.makedirs(model_dir, exist_ok=True)
     model_path = os.path.join(model_dir, "model.pth")
@@ -169,18 +142,14 @@ def main():
     log_lines.append(f"Num classes: {num_classes}")
     log_lines.append("")
 
-    # -----------------------
-    # Neptune run init
-    # -----------------------
     run = None
     if USE_NEPTUNE and neptune is not None:
-        extra_tags = args.tag if args.tag is not None else []
-        tags = ["vig_ti", "classification",] + extra_tags
+        tags = ["vig_ti", "classification", f"lr_{LR}", f"epoch_{EPOCHS}",f"train_bs_{TRAIN_BS}"] 
 
         run = neptune.init_run(
             project="ALLab-Boun/connected-pixels",
             api_token=NEPTUNE_API_TOKEN,
-            name="vig_ti  most basic setup",
+            name="vig_ti no_augmentation",
             tags=tags,
         )
 

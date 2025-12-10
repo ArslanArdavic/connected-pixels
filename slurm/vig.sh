@@ -30,10 +30,4 @@ python -m pip install --upgrade --force-reinstall --no-cache-dir \
 
 python -m pip install --no-cache-dir timm
 
-# Base settings
-EPOCHS=300
-BS=512
-NW=8
-
-python train_vig.py --epochs $EPOCHS --train-batch-size $BS --test-batch-size $BS --num-workers $NW \
-  --lr 1e-5 --tag "lr_1e-5" --tag "bs_$BS"
+python train_vig.py
