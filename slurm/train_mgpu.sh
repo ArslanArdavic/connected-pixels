@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=train
-#SBATCH --output=slurm/log/train/vitcls_%j.out
-#SBATCH --error=slurm/log/train/vitcls_%j.err
+#SBATCH --job-name=train_mgpu
+#SBATCH --output=slurm/log/train/mgpu_%j.out
+#SBATCH --error=slurm/log/train/mgpu_%j.err
 #SBATCH --time=10-00:00:00
-#SBATCH --gpus=1
+#SBATCH --gpus=4
 #SBATCH --cpus-per-gpu=8
 #SBATCH --mem-per-gpu=40G
 #SBATCH --container-image ghcr.io\#arslanardavic/vision
