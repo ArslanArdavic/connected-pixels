@@ -28,6 +28,9 @@ export SLURM_STDERR_PATH="$SLURM_SUBMIT_DIR/slurm/log/train/vigbasic_${SLURM_JOB
 python -m pip install --upgrade --force-reinstall --no-cache-dir \
     numpy==1.25.1 scikit-learn==1.3.2 scipy
 
+python -m pip install --no-cache-dir \
+    "git+https://github.com/huawei-noah/Efficient-AI-Backbones.git#egg=vig_pytorch"
+
 # Base settings
 EPOCHS=300
 BS=1024
