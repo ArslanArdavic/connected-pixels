@@ -29,8 +29,8 @@ except ImportError:
 def parse_args():
     parser = argparse.ArgumentParser(description="ViG-T ImageNet training")
 
-    parser.add_argument("--train-batch-size", type=int, default=1024)
-    parser.add_argument("--test-batch-size", type=int, default=1024)
+    parser.add_argument("--train-batch-size", type=int, default=768)
+    parser.add_argument("--test-batch-size", type=int, default=768)
     parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=300)
     parser.add_argument("--lr", type=float, default=2e-3)
