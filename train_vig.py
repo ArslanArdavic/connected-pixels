@@ -140,10 +140,6 @@ def main():
     # Model, loss, optimizer
     # -----------------------
     model = vig_ti_224_gelu(num_classes=1000)  # no pretraining, pure classification head
-    # Ensure classifier head matches num_classes (should be 1000 by default, but explicit is safer)
-    if model.heads.head.out_features != num_classes:
-        in_features = model.heads.head.in_features
-        model.heads.head = nn.Linear(in_features, num_classes)
 
     model.to(device)
 
