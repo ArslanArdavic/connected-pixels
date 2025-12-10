@@ -272,9 +272,8 @@ class PatchMasker:
             # -- MASK --
             mask_positions = idx[g == 0]
             if mask_positions.numel() > 0:
-                patch_slice[mask_positions] = self.mask_token.expand(
-                    mask_positions.numel(), D
-                )
+                mask_token_2d = self.mask_token.view(1, D).expand(mask_positions.numel(), D)
+                patch_slice[mask_positions] = mask_token_2d
 
             # -- RANDOM OTHER PATCH --
             random_positions = idx[g == 1]
