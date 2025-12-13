@@ -72,55 +72,84 @@ def accuracy_topk(logits, targets, topk=(1, 5)):
 # -----------------------
 def _standardize_tokens(x, expected_num_patches):
     """
-    Make tokens [B,N,D] for masking/loss while preserving original layout info.
-    Returns (tokens_bnd, layout), where layout is:
-      - "BND" if original was [B,N,D]
-      - "BDN" if original was [B,D,N]
-      - None if cannot standardize
+    Convert candidate tensor to tokens [B,N,D].
+    Supports:
+      - [B,N,D]
+      - [B,D,N]
+      - [B,C,H,W] where H*W == N  (treat spatial locations as patches)
+    Returns (tokens_bnd, layout, extra) where extra stores (C,H,W) for restore.
     """
-    if not torch.is_tensor(x) or x.dim() != 3:
-        return None, None
+    if not torch.is_tensor(x):
+        return None, None, None
 
-    b, a, c = x.shape
+    if x.dim() == 3:
+        b, a, c = x.shape
+        if a == expected_num_patches:
+            return x, "BND", None
+        if c == expected_num_patches:
+            return x.transpose(1, 2).contiguous(), "BDN", None
+        # fallback: treat as [B,N,D]
+        return x, "BND", None
 
-    # Heuristic: whichever dim equals expected_num_patches is N
-    if a == expected_num_patches:
-        return x, "BND"
-    if c == expected_num_patches:
-        return x.transpose(1, 2).contiguous(), "BDN"
+    if x.dim() == 4:
+        b, c, h, w = x.shape
+        if h * w != expected_num_patches:
+            return None, None, None
+        # [B,C,H,W] -> [B, H*W, C]
+        tokens = x.flatten(2).transpose(1, 2).contiguous()
+        return tokens, "BCHW", (c, h, w)
 
-    # Fallback: assume [B,N,D] if a looks like "N"
-    return x, "BND"
+    return None, None, None
 
 
-def _restore_tokens(tokens_bnd, layout):
-    """Restore to original layout."""
+def _restore_tokens(tokens_bnd, layout, extra):
+    """Restore tokens back to original tensor layout."""
     if layout == "BND":
         return tokens_bnd
     if layout == "BDN":
         return tokens_bnd.transpose(1, 2).contiguous()
+    if layout == "BCHW":
+        c, h, w = extra
+        # [B, H*W, C] -> [B,C,H,W]
+        return tokens_bnd.transpose(1, 2).contiguous().view(tokens_bnd.size(0), c, h, w)
     return tokens_bnd
+
+
+def _extract_tensors(obj):
+    """Recursively pull tensors out of nested outputs."""
+    out = []
+    if torch.is_tensor(obj):
+        out.append(obj)
+    elif isinstance(obj, (list, tuple)):
+        for v in obj:
+            out.extend(_extract_tensors(v))
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            out.extend(_extract_tensors(v))
+    return out
 
 
 def find_token_modules(model, sample_images, expected_num_patches):
     """
     Dry-run forward once and find:
-      - first module output that looks like tokens: patch_embed-ish
-      - last  module output that looks like tokens: final tokens before pooling/head
+      - first module output that can be standardized to [B,N,D]
+      - last  module output that can be standardized to [B,N,D]
+    We allow 3D tokens or 4D feature maps with H*W == N, and we also look
+    inside tuples/lists/dicts.
     """
     token_hits = []
     hooks = []
 
     def make_hook(name):
         def hook_fn(module, inp, out):
-            tok, layout = _standardize_tokens(out, expected_num_patches)
-            if tok is None:
-                return
-            # record in forward order
-            token_hits.append((name, module, out.shape, layout))
+            tensors = _extract_tensors(out)
+            for t in tensors:
+                tok, layout, extra = _standardize_tokens(t, expected_num_patches)
+                if tok is None:
+                    continue
+                token_hits.append((name, module, t.shape, layout, extra))
         return hook_fn
 
-    # Register hooks on all submodules (skip root "")
     for name, module in model.named_modules():
         if name == "":
             continue
@@ -134,24 +163,26 @@ def find_token_modules(model, sample_images, expected_num_patches):
         h.remove()
 
     if len(token_hits) == 0:
+        # Helpful debug: show some common tensor shapes seen (optional quick check)
         raise RuntimeError(
-            "Could not find any 3D token-like module outputs in ViG forward pass. "
-            "You may need to expose token features (e.g., model.forward_features) in your vig_pytorch version."
+            "Could not find any token-like outputs matching N patches. "
+            "This ViG likely does not expose a patch grid at 224/patch_size. "
+            "Try printing model internals or using a built-in forward_features() if available."
         )
 
     patch_mod = token_hits[0]
     final_mod = token_hits[-1]
     return patch_mod, final_mod, token_hits
-
-
 class ViGForMPP(nn.Module):
     """
     Wraps a ViG classifier and:
-      1) corrupts patch embeddings inside the forward pass via a hook
-      2) captures final token features via another hook
+      1) corrupts patch-like tokens inside the forward pass via a hook (80/10/10 on 50% mask)
+      2) captures final token-like features via another hook
       3) predicts mean 3-bit patch color targets with an MPP head
 
-    Note: We do NOT change augmentations here; dataset already matches imagenet_data.py.
+    Requires global helpers:
+      - _standardize_tokens(x, expected_num_patches) -> (tokens_bnd, layout, extra)
+      - _restore_tokens(tokens_bnd, layout, extra) -> original layout tensor
     """
 
     def __init__(self, base_model, expected_num_patches):
@@ -159,155 +190,239 @@ class ViGForMPP(nn.Module):
         self.base = base_model
         self.expected_num_patches = expected_num_patches
 
-        # Will be set after hook discovery
+        # Hook targets
         self._patch_module = None
         self._final_module = None
         self._patch_hook = None
         self._final_hook = None
+
+        # Per-forward state
+        self._cur_mask = None          # [B,N] bool
+        self._last_tokens = None       # [B,N,D] captured
         self._final_layout = None
+        self._final_extra = None
 
-        self._cur_mask = None  # [B,N] bool, set each forward
-        self._last_tokens = None  # [B,N,D] captured
+        # Learnable mask token + MPP head (created in setup after we know token dim)
+        self.mask_token = None         # nn.Parameter [1,1,D]
+        self.mpp_head = None           # nn.Linear(D, 24)
 
-        # Learnable mask token + head created after we know token dim
-        self.mask_token = None
-        self.mpp_head = None
+    def remove_hooks(self):
+        if self._patch_hook is not None:
+            self._patch_hook.remove()
+            self._patch_hook = None
+        if self._final_hook is not None:
+            self._final_hook.remove()
+            self._final_hook = None
 
-    def _corrupt_hook(self, module, inp, out):
+    def _corrupt_tokens_bnd(self, tokens_bnd):
         """
-        Corrupt 50% of patch tokens (mask positions come from dataset):
-          - 80% -> replace with learnable [MASK]
-          - 10% -> replace with random other patch embedding
-          - 10% -> keep unchanged
+        tokens_bnd: [B,N,D]  -> returns corrupted tokens [B,N,D]
+        Applies corruption only on self._cur_mask positions.
         """
         if self._cur_mask is None:
-            return out
-
-        tokens_bnd, layout = _standardize_tokens(out, self.expected_num_patches)
-        if tokens_bnd is None:
-            return out
+            return tokens_bnd
 
         B, N, D = tokens_bnd.shape
         mask = self._cur_mask
         if mask.device != tokens_bnd.device:
             mask = mask.to(tokens_bnd.device)
 
-        # Safety: if shapes mismatch, do nothing
         if mask.shape != (B, N):
-            return out
+            return tokens_bnd
 
-        tokens = tokens_bnd
-
-        # Sample 80/10/10 decisions only on masked positions
-        r = torch.rand(B, N, device=tokens.device)
+        r = torch.rand(B, N, device=tokens_bnd.device)
         do_mask = mask & (r < 0.80)
         do_rand = mask & (r >= 0.80) & (r < 0.90)
-        # keep = mask & (r >= 0.90) -> do nothing
+        # keep = mask & (r >= 0.90) -> unchanged
 
-        # Random other patch embedding: shuffle across batch*patches
-        flat = tokens.reshape(B * N, D)
-        perm = torch.randperm(B * N, device=tokens.device)
+        flat = tokens_bnd.reshape(B * N, D)
+        perm = torch.randperm(B * N, device=tokens_bnd.device)
         flat_shuf = flat[perm].reshape(B, N, D)
 
-        tokens2 = tokens.clone()
+        out = tokens_bnd.clone()
 
         if do_mask.any():
-            mask_tok = self.mask_token.expand(B, N, D)
-            tokens2[do_mask] = mask_tok[do_mask]
+            mtok = self.mask_token.expand(B, N, D)
+            out[do_mask] = mtok[do_mask]
 
         if do_rand.any():
-            tokens2[do_rand] = flat_shuf[do_rand]
+            out[do_rand] = flat_shuf[do_rand]
 
-        return _restore_tokens(tokens2, layout)
+        return out
+
+    def _replace_first_tokenlike_in_structure(self, obj):
+        """
+        Recursively finds the first tensor in `obj` that can be standardized to [B,N,D]
+        (with N == expected_num_patches), corrupts it, restores it to original layout,
+        and returns the updated structure.
+        """
+        # Tensor case
+        if torch.is_tensor(obj):
+            tokens_bnd, layout, extra = _standardize_tokens(obj, self.expected_num_patches)
+            if tokens_bnd is None:
+                return obj, False
+            tokens_bnd = self._corrupt_tokens_bnd(tokens_bnd)
+            restored = _restore_tokens(tokens_bnd, layout, extra)
+            return restored, True
+
+        # Tuple/list case
+        if isinstance(obj, tuple):
+            lst = list(obj)
+            for i in range(len(lst)):
+                new_v, done = self._replace_first_tokenlike_in_structure(lst[i])
+                if done:
+                    lst[i] = new_v
+                    return tuple(lst), True
+            return obj, False
+
+        if isinstance(obj, list):
+            lst = list(obj)
+            for i in range(len(lst)):
+                new_v, done = self._replace_first_tokenlike_in_structure(lst[i])
+                if done:
+                    lst[i] = new_v
+                    return lst, True
+            return obj, False
+
+        # Dict case
+        if isinstance(obj, dict):
+            new_d = dict(obj)
+            for k in new_d.keys():
+                new_v, done = self._replace_first_tokenlike_in_structure(new_d[k])
+                if done:
+                    new_d[k] = new_v
+                    return new_d, True
+            return obj, False
+
+        return obj, False
+
+    def _capture_last_tokenlike_from_structure(self, obj):
+        """
+        Recursively scans `obj` and stores the last token-like tensor (standardized to [B,N,D])
+        into self._last_tokens.
+        """
+        last = None
+        last_layout = None
+        last_extra = None
+
+        def walk(x):
+            nonlocal last, last_layout, last_extra
+            if torch.is_tensor(x):
+                tokens_bnd, layout, extra = _standardize_tokens(x, self.expected_num_patches)
+                if tokens_bnd is not None:
+                    last = tokens_bnd
+                    last_layout = layout
+                    last_extra = extra
+                return
+            if isinstance(x, (list, tuple)):
+                for v in x:
+                    walk(v)
+                return
+            if isinstance(x, dict):
+                for v in x.values():
+                    walk(v)
+                return
+
+        walk(obj)
+
+        if last is not None:
+            self._last_tokens = last
+            self._final_layout = last_layout
+            self._final_extra = last_extra
+
+    def _corrupt_hook(self, module, inp, out):
+        """
+        Hook on the patch-embedding-like module output. We corrupt the first token-like
+        tensor found in the module output structure and return the modified output.
+        """
+        if self._cur_mask is None:
+            return out
+
+        new_out, _done = self._replace_first_tokenlike_in_structure(out)
+        return new_out
 
     def _capture_final_hook(self, module, inp, out):
-        tokens_bnd, layout = _standardize_tokens(out, self.expected_num_patches)
-        if tokens_bnd is None:
-            return
-        self._last_tokens = tokens_bnd  # [B,N,D]
-        self._final_layout = layout
+        """
+        Hook on a late module output. We capture the last token-like tensor found in out.
+        """
+        self._capture_last_tokenlike_from_structure(out)
+        return out
 
     def setup(self, sample_images):
         """
-        Discovers token modules (patch embedding and final tokens) and installs hooks.
-        Also initializes mask_token and mpp_head using inferred token dimension.
+        Discovers token-like patch module and final token module (using your find_token_modules),
+        then installs hooks and initializes mask_token + mpp_head after inferring token dim.
         """
+        # Discover modules
         patch_mod, final_mod, _hits = find_token_modules(self.base, sample_images, self.expected_num_patches)
-        patch_name, patch_module, patch_shape, _ = patch_mod
-        final_name, final_module, final_shape, _ = final_mod
+        patch_name, patch_module, patch_shape, patch_layout, patch_extra = patch_mod
+        final_name, final_module, final_shape, final_layout, final_extra = final_mod
 
         self._patch_module = patch_module
         self._final_module = final_module
 
         # Infer token dim from final module output
-        # Standardize to [B,N,D]
+        tmp = {"tokens": None}
+
+        def tmp_hook(_m, _i, o):
+            # Capture last token-like tensor from o
+            self._last_tokens = None
+            self._capture_last_tokenlike_from_structure(o)
+            if self._last_tokens is not None:
+                tmp["tokens"] = self._last_tokens
+
+        h = final_module.register_forward_hook(tmp_hook)
+        self.base.eval()
         with torch.no_grad():
-            self.base.eval()
-            # run once without hooks (temporary)
-            tok_dim = None
-            hooks = []
-
-            tmp_tokens = {"x": None}
-
-            def tmp_hook(_m, _i, o):
-                t, _layout = _standardize_tokens(o, self.expected_num_patches)
-                if t is not None:
-                    tmp_tokens["x"] = t
-
-            hooks.append(final_module.register_forward_hook(tmp_hook))
             _ = self.base(sample_images)
-            for h in hooks:
-                h.remove()
+        h.remove()
 
-            if tmp_tokens["x"] is None:
-                raise RuntimeError("Failed to infer token dim from final token module output.")
-            tok_dim = tmp_tokens["x"].shape[-1]
+        if tmp["tokens"] is None:
+            raise RuntimeError("Failed to infer token dimension from final token-like module output.")
+
+        tok_dim = tmp["tokens"].shape[-1]
 
         # Create learnable mask token + MPP head
         self.mask_token = nn.Parameter(torch.zeros(1, 1, tok_dim))
         nn.init.normal_(self.mask_token, mean=0.0, std=0.02)
-
-        # Predict (R,G,B) each as 8-way classification => 24 logits per patch
         self.mpp_head = nn.Linear(tok_dim, 24)
 
-        # Install persistent hooks
-        if self._patch_hook is not None:
-            self._patch_hook.remove()
-        if self._final_hook is not None:
-            self._final_hook.remove()
-
+        # Install hooks
+        self.remove_hooks()
         self._patch_hook = patch_module.register_forward_hook(lambda m, i, o: self._corrupt_hook(m, i, o))
         self._final_hook = final_module.register_forward_hook(lambda m, i, o: self._capture_final_hook(m, i, o))
 
-        print(f"[MPP] Patch token module: {patch_name} | shape example: {patch_shape}")
-        print(f"[MPP] Final token module: {final_name} | shape example: {final_shape}")
+        print(f"[MPP] Patch token-like module: {patch_name} | example tensor shape: {patch_shape} | layout: {patch_layout}")
+        print(f"[MPP] Final token-like module: {final_name} | example tensor shape: {final_shape} | layout: {final_layout}")
         print(f"[MPP] Inferred token dim: {tok_dim}")
 
     def forward(self, images, patch_mask):
         """
         Returns:
-          - base_logits: [B,1000] (unused in MPP loss, but kept for debugging)
-          - mpp_logits:  [B,N,3,8]
-          - tokens:      [B,N,D] final tokens
+          base_logits: [B,1000] from original ViG head (kept intact)
+          mpp_logits:  [B,N,3,8]
+          tokens:      [B,N,D] final token-like features
         """
         if self.mask_token is None or self.mpp_head is None:
-            raise RuntimeError("Call model.setup(sample_images) before training MPP.")
+            raise RuntimeError("Call model.setup(sample_images) before using ViGForMPP.")
 
         self._cur_mask = patch_mask
         self._last_tokens = None
+        self._final_layout = None
+        self._final_extra = None
 
-        base_logits = self.base(images)  # triggers hooks
+        base_logits = self.base(images)  # triggers corruption + capture hooks
+
         if self._last_tokens is None:
             raise RuntimeError(
-                "Final token features were not captured. "
-                "Hook discovery may have picked an incompatible module."
+                "Final token-like features were not captured. "
+                "Hook discovery may have picked an incompatible module output."
             )
 
         B, N, D = self._last_tokens.shape
-        out = self.mpp_head(self._last_tokens)  # [B,N,24]
-        out = out.view(B, N, 3, 8)  # [B,N,3,8]
+        out = self.mpp_head(self._last_tokens)   # [B,N,24]
+        out = out.view(B, N, 3, 8)               # [B,N,3,8]
         return base_logits, out, self._last_tokens
-
 
 def mpp_loss(mpp_logits, targets, patch_mask):
     """
