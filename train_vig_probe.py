@@ -383,9 +383,11 @@ class ViGForMPP(nn.Module):
         tok_dim = tmp["tokens"].shape[-1]
 
         # Create learnable mask token + MPP head
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, tok_dim))
+        dev = sample_images.device
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, tok_dim, device=dev))
         nn.init.normal_(self.mask_token, mean=0.0, std=0.02)
-        self.mpp_head = nn.Linear(tok_dim, 24)
+
+        self.mpp_head = nn.Linear(tok_dim, 24).to(dev)
 
         # Install hooks
         self.remove_hooks()
