@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=vigprobe
-#SBATCH --output=slurm/log/train/vigprobe%j.out
-#SBATCH --error=slurm/log/train/vigprobe%j.err
+#SBATCH --output=slurm/log/pre-train/vigprobe%j.out
+#SBATCH --error=slurm/log/pre-train/vigprobe%j.err
 #SBATCH --time=10-00:00:00
 #SBATCH --gpus=1
 #SBATCH --cpus-per-gpu=8
@@ -16,11 +16,11 @@ set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
 # Ensure the log directory exists (under slurm/)
-mkdir -p slurm/log/train
+mkdir -p slurm/log/pre-train
 
 # resolve the same filename sbatch will use by expanding %j → $SLURM_JOB_ID
-export SLURM_STDOUT_PATH="$SLURM_SUBMIT_DIR/slurm/log/train/vigprobe${SLURM_JOB_ID}.out"
-export SLURM_STDERR_PATH="$SLURM_SUBMIT_DIR/slurm/log/train/vigprobe${SLURM_JOB_ID}.err"
+export SLURM_STDOUT_PATH="$SLURM_SUBMIT_DIR/slurm/log/pre-train/vigprobe${SLURM_JOB_ID}.out"
+export SLURM_STDERR_PATH="$SLURM_SUBMIT_DIR/slurm/log/pre-train/vigprobe${SLURM_JOB_ID}.err"
 
 >&2 echo "SLURM_STDOUT_PATH=$SLURM_STDOUT_PATH"
 >&2 echo "SLURM_STDERR_PATH=$SLURM_STDERR_PATH"
