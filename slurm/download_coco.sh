@@ -64,14 +64,34 @@ VAL_URL="http://images.cocodataset.org/zips/val2017.zip"
 ANN_URL="http://images.cocodataset.org/annotations/annotations_trainval2017.zip"
 
 
-download "$TRAIN_URL" "train2017.zip"
-download "$VAL_URL"   "val2017.zip"
-download "$ANN_URL"   "annotations_trainval2017.zip"
+#download "$TRAIN_URL" "train2017.zip"
+#download "$VAL_URL"   "val2017.zip"
+#download "$ANN_URL"   "annotations_trainval2017.zip"
 
-# extract (idempotent-ish: skip if folder already exists)
-if [[ ! -d train2017 ]]; then unzip -q train2017.zip; else >&2 echo "train2017/ exists, skipping unzip"; fi
-if [[ ! -d val2017   ]]; then unzip -q val2017.zip;   else >&2 echo "val2017/ exists, skipping unzip";   fi
-if [[ ! -d annotations ]]; then unzip -q annotations_trainval2017.zip; else >&2 echo "annotations/ exists, skipping unzip"; fi
+
+extract_zip() {
+  local zip_path="$1"
+  local dest_dir="$2"
+
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q "$zip_path" -d "$dest_dir"
+  else
+    python - <<'PY' "$zip_path" "$dest_dir"
+import sys, os, zipfile
+zip_path, dest_dir = sys.argv[1], sys.argv[2]
+os.makedirs(dest_dir, exist_ok=True)
+with zipfile.ZipFile(zip_path, 'r') as z:
+    # Extract streaming; no big RAM usage
+    z.extractall(dest_dir)
+print(f"Extracted {zip_path} -> {dest_dir}")
+PY
+  fi
+}
+
+# extract (skip if already extracted)
+if [[ ! -d train2017 ]]; then extract_zip train2017.zip .; else >&2 echo "train2017/ exists, skipping"; fi
+if [[ ! -d val2017   ]]; then extract_zip val2017.zip   .; else >&2 echo "val2017/ exists, skipping";   fi
+if [[ ! -d annotations ]]; then extract_zip annotations_trainval2017.zip .; else >&2 echo "annotations/ exists, skipping"; fi
 
 # optional cleanup to save space (comment out if you want to keep zips)
 rm -f train2017.zip val2017.zip annotations_trainval2017.zip
