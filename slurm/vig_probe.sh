@@ -2,7 +2,7 @@
 #SBATCH --job-name=vigprobe
 #SBATCH --output=slurm/log/pre-train/vigprobe%j.out
 #SBATCH --error=slurm/log/pre-train/vigprobe%j.err
-#SBATCH --time=10-00:00:00
+#SBATCH --time=20-00:00:00
 #SBATCH --gpus=1
 #SBATCH --cpus-per-gpu=8
 #SBATCH --mem-per-gpu=40G
