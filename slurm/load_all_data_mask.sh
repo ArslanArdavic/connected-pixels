@@ -24,8 +24,8 @@ export SLURM_STDERR_PATH="$SLURM_SUBMIT_DIR/slurm/log/data/all_mask_${SLURM_JOB_
 >&2 echo "SLURM_STDOUT_PATH=$SLURM_STDOUT_PATH"
 >&2 echo "SLURM_STDERR_PATH=$SLURM_STDERR_PATH"
 
-#python -m pip install --upgrade --force-reinstall --no-cache-dir \
-#    numpy==1.25.1 scikit-learn==1.3.2
+python -m pip install --upgrade --force-reinstall --no-cache-dir \
+    numpy==1.25.1 scikit-learn==1.3.2
     
 python -m pip install --upgrade --force-reinstall --no-cache-dir \
     scipy
