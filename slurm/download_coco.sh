@@ -38,15 +38,35 @@ df -h "$SLURM_SUBMIT_DIR" >&2 || true
 
 cd "$COCO_DIR"
 
+download() {
+  local url="$1"
+  local out="$2"
+
+  if command -v wget >/dev/null 2>&1; then
+    wget -c -O "$out" "$url"
+  elif command -v curl >/dev/null 2>&1; then
+    # resume if possible
+    curl -L --fail --continue-at - -o "$out" "$url"
+  else
+    # python fallback (no resume)
+    python - <<'PY'
+import sys, urllib.request
+url, out = sys.argv[1], sys.argv[2]
+urllib.request.urlretrieve(url, out)
+PY
+    "$url" "$out"
+  fi
+}
+
 # COCO official URLs
 TRAIN_URL="http://images.cocodataset.org/zips/train2017.zip"
 VAL_URL="http://images.cocodataset.org/zips/val2017.zip"
 ANN_URL="http://images.cocodataset.org/annotations/annotations_trainval2017.zip"
 
-# download (resume-safe)
-wget -c "$TRAIN_URL"
-wget -c "$VAL_URL"
-wget -c "$ANN_URL"
+
+download "$TRAIN_URL" "train2017.zip"
+download "$VAL_URL"   "val2017.zip"
+download "$ANN_URL"   "annotations_trainval2017.zip"
 
 # extract (idempotent-ish: skip if folder already exists)
 if [[ ! -d train2017 ]]; then unzip -q train2017.zip; else >&2 echo "train2017/ exists, skipping unzip"; fi
